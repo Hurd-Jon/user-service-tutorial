@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /   #new 
+  name: users-backend-ingress
+  namespace: example
+spec:
+#  tls:
+#  - hosts:
+#    - thoughts.example.local
+#    secretName: marcel-tls-secret
+  rules:
+  - host: users.example.local
+    http:
+      paths:     
+      - path: /
+        backend:
+          serviceName: users-service
+          servicePort: 80
+
