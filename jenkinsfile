@@ -1,0 +1,75 @@
+pipeline {
+    agent any
+    triggers{
+        pollSCM('H/2 * * * *')
+    }
+    stages {
+        stage('Info') {
+            steps {
+                sh '''printenv
+                docker --version
+                docker-compose --version
+                '''
+            }
+        }
+        stage('Clone') {
+            steps {
+                git credentialsId: '480f4a99-a001-4728-824d-8773a9a7980d', url: 'https://github.com/Hurd-Jon/user-service-tutorial.git'
+            }
+        }
+        stage('Unit Test') {
+            steps {
+                sh '''cd UsersBackend
+                    docker-compose build test-sqlite
+                    docker-compose run test-sqlite
+                    '''
+            }
+        }
+        stage('Integration Test') {
+            steps {
+                sh '''cd UsersBackend
+                    docker-compose run -d db
+                    echo 'Wait 1 min for DB to start up'
+                    sleep 60
+                    echo 'Run tests'
+                    docker-compose build test-postgresql
+                    docker-compose run test-postgresql
+                    '''
+            }
+        }
+        stage('Tag and Push') {
+            steps {
+                sh '''cd UsersBackend
+                    MAJOR_NUMBER=1
+                    MINOR_NUMBER=1
+                    DOCKER_TAG="${MAJOR_NUMBER}.${MINOR_NUMBER}.${BUILD_NUMBER}"
+                    echo "TAG number will be ${DOCKER_TAG}"
+                    echo ${DOCKER_PASSWORD} | docker login -u jonhurd --password-stdin
+                    docker-compose build server
+                    docker tag users_server:latest users_server:$DOCKER_TAG
+                    docker tag users_server:$DOCKER_TAG jonhurd/users-backend:$DOCKER_TAG
+                    docker tag users_server:latest jonhurd/users-backend:latest
+                    docker push jonhurd/users-backend:$DOCKER_TAG
+                    docker push jonhurd/users-backend:latest
+                    
+                    docker-compose build db
+                    docker tag users_backend_db:latest users_backend_db:$DOCKER_TAG
+                    docker tag users_backend_db:$DOCKER_TAG jonhurd/users-db:$DOCKER_TAG
+                    docker tag users_backend_db:latest jonhurd/users-db:latest
+                    docker push jonhurd/users-db:$DOCKER_TAG
+                    docker push jonhurd/users-db:latest                    
+                    
+                    
+                    '''
+            }
+        }
+        stage('Deploy to Dev') {
+            steps {
+                sh '''
+                    kubectl apply -f ./kubernetes/deployment-microk8s.yaml
+                    kubectl apply -f ./kubernetes/service.yaml
+                    '''
+            }
+        }          
+    }
+}
